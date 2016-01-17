@@ -1,0 +1,5 @@
+CLS
+BCC -mh p4.cpp
+DEL *.DSK
+DEL *.OBJ
+DEL *.BAK
