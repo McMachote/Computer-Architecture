@@ -1,7 +1,5 @@
 #include <dos.h>
-#include <conio.h>
 #include <stdio.h>
-#include <iostream.h>
 
 #define K_UP 72
 #define K_DOWN 80
@@ -57,18 +55,8 @@ RGBQUAD palette[256];
 BYTE *video_memory = (BYTE *)0xA0000000L;
 FILE *bitmap_file;
 
-unsigned int brightness_factor = 128;
+unsigned int brightness_factor = 1;
 unsigned int eger;
-
-//--------------------------------------------------------------------------//
-
-void xorSwap (int *x, int *y) {
-     if (x != y) {
-         *x ^= *y;
-         *y ^= *x;
-         *x ^= *y;
-     }
- }
  
  //--------------------------------------------------------------------------//
 
@@ -82,10 +70,10 @@ void set_video_mode(int mode){
 
 void set_video_palette(){ //color rescale
 	outportb(0x038C, 0);
-	for(int i=0; i<bmih.biClrUsed; i++){
-		outp(0x03C9, palette[i].rgbRed * 63/255);
-		outp(0x03C9, palette[i].rgbGreen * 63/255);
-		outp(0x03C9, palette[i].rgbBlue * 63/255);
+	for(int i=0; i<bmih.biClrUsed; i++){ //bit shifting improves!
+		outp(0x03C9, palette[i].rgbRed >> 2);
+		outp(0x03C9, palette[i].rgbGreen >> 2);
+		outp(0x03C9, palette[i].rgbBlue >> 2);
 	}
 }
 
@@ -103,9 +91,7 @@ void load_image_data(char *file_name){
 	fread(&bmfh, sizeof(bmfh), 1, bitmap_file);
 	fread(&bmih, sizeof(bmih), 1, bitmap_file);
 	fread(&palette[0], bmih.biClrUsed * sizeof(RGBQUAD),  1, bitmap_file);
-}
-
-void display_image_data(){
+	set_video_palette();
 	flip_image();
 	fclose(bitmap_file);
 }
@@ -119,31 +105,21 @@ void negative(){
 }
 
 void brightness(int x){
-	if(x > 0){
-		for(int i=0; i<bmih.biClrUsed; i++){
-			if(palette[i].rgbRed < 255){
-				palette[i].rgbRed +=x;
-			}
-			if(palette[i].rgbGreen < 255){
-				palette[i].rgbGreen += x;
-			}
-			if(palette[i].rgbBlue < 255){
-				palette[i].rgbBlue += x;
-			}
-		}
-	}
-	else{
-		for(int i=0; i<bmih.biClrUsed; i++){
-			if(palette[i].rgbRed > 0){
-				palette[i].rgbRed -=x;
-			}
-			if(palette[i].rgbGreen > 0){
-				palette[i].rgbGreen -= x;
-			}
-			if(palette[i].rgbBlue > 0){
-				palette[i].rgbBlue -= x;
-			}
-		}
+	int redAux, greenAux, blueAux;
+	for(int i=0; i<bmih.biClrUsed; i++){
+		redAux = palette[i].rgbRed + x;
+		greenAux = palette[i].rgbGreen + x;
+		blueAux = palette[i].rgbBlue + x;
+		//truncate
+		redAux = (redAux <= 255) ? redAux : 255;
+		redAux = (redAux >= 0) ? redAux : 0;
+		greenAux = (greenAux <= 255) ? greenAux : 255;
+		greenAux = (greenAux >= 0) ? greenAux : 0;
+		blueAux = (blueAux <= 255) ? blueAux : 255;
+		blueAux = (blueAux >= 0) ? blueAux : 0;
+		palette[i].rgbRed = redAux;
+		palette[i].rgbGreen = greenAux;
+		palette[i].rgbBlue = blueAux;
 	}
 }
 
@@ -153,10 +129,10 @@ void interrupt NewHandler09H(...){
 	asm sti
 	switch(eger){
 		case K_UP:
-			brightness(1);
+			brightness(brightness_factor);
 			break;
 		case K_DOWN:
-			brightness(-1);
+			brightness(-brightness_factor);
 			break;
 		case SPACE_BAR:
 			negative();
@@ -171,7 +147,7 @@ void interrupt NewHandler09H(...){
 
 void main(int argc, char *argv[]){
 	if (argc != 2) {
-		cout << "Incorrect number of arguments." << endl;
+		printf("Incorrect number of arguments.");
 		return; 
 	}
 	set_video_mode(0x13);
@@ -179,12 +155,10 @@ void main(int argc, char *argv[]){
 	set_video_palette();
 	OldHandler09H = getvect(0x09);
 	setvect(0x09, NewHandler09H);
-	display_image_data();
 	do{
 		set_video_palette();
 		eger = inportb(0x60);
 	}while (eger != ESC);
 	setvect(0x09, OldHandler09H);
-	getch();
 	set_video_mode(0x03);
 }
